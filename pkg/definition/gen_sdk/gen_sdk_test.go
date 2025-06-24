@@ -44,10 +44,26 @@ var _ = Describe("Test Generating SDK", func() {
 	}
 	var langArgs []string
 
+	var skipKubeTests bool
+
 	BeforeEach(func() {
 		meta.InitSDK = false
 		meta.File = []string{filepath.Join("testdata", "cron-task.cue")}
 		meta.cuePaths = []string{}
+
+		// Add kubeconfig check and skip if not present
+		kubeconfig := os.Getenv("KUBECONFIG")
+		if kubeconfig == "" {
+			home, err := os.UserHomeDir()
+			if err == nil {
+				kubeconfig = filepath.Join(home, ".kube", "config")
+			}
+		}
+		skipKubeTests = false
+		if _, err := os.Stat(kubeconfig); os.IsNotExist(err) {
+			skipKubeTests = true
+			Skip("No kubeconfig found, skipping tests that require Kubernetes client")
+		}
 	})
 
 	checkDirNotEmpty := func(dir string) {
@@ -65,6 +81,10 @@ var _ = Describe("Test Generating SDK", func() {
 		Expect(err).Should(BeNil())
 	}
 	It("Test generating SDK and init the scaffold", func() {
+		if skipKubeTests {
+			Skip("Skipping test as no Kubernetes client is available")
+			return
+		}
 		meta.InitSDK = true
 		genWithMeta()
 		checkDirNotEmpty(filepath.Join(outputDir, "pkg", "apis"))

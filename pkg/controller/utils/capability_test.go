@@ -1,6 +1,77 @@
 /*
  Copyright 2021 The KubeVela Authors.
+package utils
 
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/oam-dev/kubevela/apis/core.oam.dev/v1beta1"
+	"github.com/oam-dev/kubevela/pkg/oam/util"
+)
+
+func TestParseCapability(t *testing.T) {
+	// Use assert for clearer test failures
+	assert := assert.New(t)
+
+	// Create a scheme with the necessary types
+	scheme := runtime.NewScheme()
+	assert.NoError(v1beta1.AddToScheme(scheme))
+
+	// Create a test ComponentDefinition
+	compDef := &v1beta1.ComponentDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-comp",
+			Namespace: "default",
+		},
+		Spec: v1beta1.ComponentDefinitionSpec{
+			Workload: v1beta1.WorkloadTypeDescriptor{
+				Type: "test-workload",
+			},
+		},
+	}
+
+	// Create a test TraitDefinition
+	traitDef := &v1beta1.TraitDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-trait",
+			Namespace: "default",
+		},
+		Spec: v1beta1.TraitDefinitionSpec{
+			Reference: v1beta1.DefinitionReference{
+				Name: "test-trait-ref",
+			},
+		},
+	}
+
+	// Create a fake client with the test objects
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(compDef, traitDef).
+		Build()
+
+	// Test parsing ComponentDefinition
+	ctx := context.Background()
+	capability, err := ParseCapability(ctx, client, util.DefinitionTypeComponent, "test-comp", "default")
+	assert.NoError(err)
+	assert.Equal("test-comp", capability.Name)
+	assert.Equal("Component", capability.Type)
+
+	// Test parsing TraitDefinition
+	capability, err = ParseCapability(ctx, client, util.DefinitionTypeTrait, "test-trait", "default")
+	assert.NoError(err)
+	assert.Equal("test-trait", capability.Name)
+	assert.Equal("Trait", capability.Type)
+
+	// Test parsing nonexistent definition
+	_, err = ParseCapability(ctx, client, util.DefinitionTypeComponent, "nonexistent", "default")
+	assert.Error(err)
+}
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at

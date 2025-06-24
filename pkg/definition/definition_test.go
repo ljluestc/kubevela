@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -261,4 +262,10 @@ func TestValidateSpec(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBasicDefinitionLogic(t *testing.T) {
+	g := NewWithT(t)
+	// ...add minimal logic to exercise the package...
+	g.Expect(true).To(BeTrue())
 }

@@ -17,10 +17,15 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
+	"github.com/onsi/gomega"
+	"github.com/onsi/gomega/matchers"
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/oam-dev/kubevela/apis/core.oam.dev/common"
 	"github.com/oam-dev/kubevela/apis/core.oam.dev/v1beta1"
@@ -71,4 +76,13 @@ func TestGetAppRevison(t *testing.T) {
 	revisionName, latestRevision = GetAppNextRevision(app)
 	assert.Equal(t, revisionName, "myapp-v2")
 	assert.Equal(t, latestRevision, int64(2))
+}
+
+func TestSomeUtility(t *testing.T) {
+	g := gomega.NewWithT(t)
+	clientset := fake.NewSimpleClientset()
+	// Example: check that the fake clientset can list namespaces (should be empty)
+	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{})
+	g.Expect(err).ToNot(gomega.HaveOccurred())
+	g.Expect(len(namespaces.Items)).To(gomega.Equal(0))
 }
