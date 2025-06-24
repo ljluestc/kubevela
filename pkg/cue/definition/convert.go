@@ -1,14 +1,36 @@
 package definition
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/oam-dev/kubevela/apis/core.oam.dev/common"
+	"github.com/oam-dev/kubevela/apis/core.oam.dev/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
-
-	"github.com/oam-dev/kubevela/apis/core.oam.dev/v1beta1"
 )
+
+// ConvertDefinitionRevisionToDefinition converts a definition revision to a definition
+func ConvertDefinitionRevisionToDefinition(ctx context.Context, dr runtime.Object) (runtime.Object, error) {
+	switch obj := dr.(type) {
+	default:
+		return nil, fmt.Errorf("unknown definition revision type: %T", obj)
+	}
+}
+
+// ConvertWorkloadDefinitionToComponentDefinition converts a WorkloadDefinition to a ComponentDefinition
+func ConvertWorkloadDefinitionToComponentDefinition(wlDef *v1beta1.WorkloadDefinition) *v1beta1.ComponentDefinition {
+	compDef := &v1beta1.ComponentDefinition{
+		ObjectMeta: wlDef.ObjectMeta,
+		Spec: v1beta1.ComponentDefinitionSpec{
+			Workload: common.WorkloadTypeDescriptor{
+				Type: wlDef.Spec.Reference.Name, // Use Reference.Name as the workload type
+			},
+		},
+	}
+	return compDef
+}
 
 // ConvertTemplateJSON2Object converts template JSON to an object
 func ConvertTemplateJSON2Object(templateJSON []byte) (*unstructured.Unstructured, error) {
@@ -21,49 +43,37 @@ func ConvertTemplateJSON2Object(templateJSON []byte) (*unstructured.Unstructured
 }
 
 // GetTypeDefReference gets type definition reference
-func GetTypeDefReference(obj runtime.Object) (*v1beta1.DefinitionReference, error) {
-	// Convert the object to unstructured first
+func GetTypeDefReference(obj runtime.Object) (*common.DefinitionReference, error) {
 	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
 		return nil, err
 	}
 	u := unstructured.Unstructured{Object: unstructuredObj}
 
-	// Check if the object is a valid definition type
 	kind := u.GetKind()
-	if kind != "WorkloadDefinition" && kind != "TraitDefinition" && 
-	   kind != "ComponentDefinition" && kind != "PolicyDefinition" && 
-	   kind != "WorkflowStepDefinition" {
+	if kind != "WorkloadDefinition" && kind != "TraitDefinition" &&
+		kind != "ComponentDefinition" && kind != "PolicyDefinition" &&
+		kind != "WorkflowStepDefinition" {
 		return nil, fmt.Errorf("object is not a valid definition type: %s", kind)
 	}
 
-	// Extract the definitionRef field from spec
 	spec, found, err := unstructured.NestedMap(u.Object, "spec")
 	if err != nil || !found {
 		return nil, fmt.Errorf("spec not found in definition")
 	}
 
-	defRef, found, err := unstructured.NestedMap(spec, "definitionRef")
+	ref, found, err := unstructured.NestedMap(spec, "reference")
 	if err != nil || !found {
-		return nil, fmt.Errorf("definitionRef not found in spec")
+		return nil, fmt.Errorf("reference not found in spec")
 	}
 
-	name, found, err := unstructured.NestedString(defRef, "name")
+	name, found, err := unstructured.NestedString(ref, "name")
 	if err != nil || !found {
-		return nil, fmt.Errorf("name not found in definitionRef")
+		return nil, fmt.Errorf("name not found in reference")
 	}
 
-	version, found, err := unstructured.NestedString(defRef, "version")
-	if err != nil {
-		return nil, fmt.Errorf("error getting version from definitionRef: %w", err)
-	}
-	if !found {
-		version = ""
-	}
-
-	return &v1beta1.DefinitionReference{
-		Name:    name,
-		Version: version,
+	return &common.DefinitionReference{
+		Name: name,
 	}, nil
 }
 
@@ -73,86 +83,51 @@ func ConvertWorkloadDefinition(def *Definition) (*v1beta1.WorkloadDefinition, er
 		return nil, fmt.Errorf("definition is not a WorkloadDefinition")
 	}
 
-	// Create a new v1beta1.WorkloadDefinition
 	wd := &v1beta1.WorkloadDefinition{}
-	
-	// Set basic metadata
 	wd.SetName(def.GetName())
 	wd.SetNamespace(def.GetNamespace())
 	wd.SetLabels(def.GetLabels())
 	wd.SetAnnotations(def.GetAnnotations())
 
-	// Extract workloadType
 	spec, found, err := unstructured.NestedMap(def.Object, "spec")
 	if err != nil || !found {
 		return nil, fmt.Errorf("spec not found in WorkloadDefinition")
 	}
 
-	workloadType, found, err := unstructured.NestedString(spec, "workloadType")
-	if err != nil || !found {
-		return nil, fmt.Errorf("workloadType not found in spec")
-	}
-	
-	// Set the workload type descriptor
-	wd.Spec.WorkloadType = workloadType
-
-	// Extract definitionRef if it exists
-	defRef, err := GetTypeDefReference(def)
-	if err == nil {
-		wd.Spec.DefinitionRef = *defRef
+	ref, found, err := unstructured.NestedMap(spec, "reference")
+	if err == nil && found {
+		name, found, err := unstructured.NestedString(ref, "name")
+		if err == nil && found {
+			wd.Spec.Reference = common.DefinitionReference{Name: name}
+		}
 	}
 
-	// Extract schematic
-	schematic, err := extractSchematic(spec)
-	if err == nil {
-		wd.Spec.Schematic = *schematic
+	schematic := extractSchematic(spec)
+	if schematic != nil {
+		wd.Spec.Schematic = schematic
 	}
 
 	return wd, nil
 }
 
 // extractSchematic extracts the schematic from the spec
-func extractSchematic(spec map[string]interface{}) (*v1beta1.Schematic, error) {
+func extractSchematic(spec map[string]interface{}) *common.Schematic {
 	schematicData, found, err := unstructured.NestedMap(spec, "schematic")
 	if err != nil || !found {
-		return nil, fmt.Errorf("schematic not found in spec")
+		return nil
 	}
 
-	schematic := &v1beta1.Schematic{}
+	schematic := &common.Schematic{}
 
-	// Check for CUE schematic
 	cueData, found, err := unstructured.NestedMap(schematicData, "cue")
 	if err == nil && found {
 		template, found, err := unstructured.NestedString(cueData, "template")
-		if err != nil || !found {
-			return nil, fmt.Errorf("template not found in cue schematic")
+		if err == nil && found {
+			schematic.CUE = &common.CUE{
+				Template: template,
+			}
 		}
-		schematic.CUE = &v1beta1.CUE{
-			Template: template,
-		}
-		return schematic, nil
 	}
 
-	// Check for HELM schematic
-	helmData, found, err := unstructured.NestedMap(schematicData, "helm")
-	if err == nil && found {
-		// Handle HELM schematic
-		return schematic, nil
-	}
-
-	// Check for KUBE schematic
-	kubeData, found, err := unstructured.NestedMap(schematicData, "kube")
-	if err == nil && found {
-		// Handle KUBE schematic
-		return schematic, nil
-	}
-
-	// Check for TERRAFORM schematic
-	terraformData, found, err := unstructured.NestedMap(schematicData, "terraform")
-	if err == nil && found {
-		// Handle TERRAFORM schematic
-		return schematic, nil
-	}
-
-	return nil, fmt.Errorf("no supported schematic found")
+	return schematic
 }

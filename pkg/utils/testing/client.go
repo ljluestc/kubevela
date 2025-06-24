@@ -1,3 +1,4 @@
+// Package testing provides utilities for testing Kubernetes resources
 package testing
 
 import (
@@ -15,18 +16,19 @@ import (
 )
 
 // GetMockClient returns a fake client for testing purposes
-func GetMockClient(scheme *runtime.Scheme, initObjs ...runtime.Object) client.Client {
+func GetMockClient(s *runtime.Scheme, initObjs ...runtime.Object) client.Client {
 	builder := fake.NewClientBuilder()
-	if scheme != nil {
-		builder = builder.WithScheme(scheme)
+	if s != nil {
+		builder = builder.WithScheme(s)
 	} else {
+		// Use the default k8s scheme
 		builder = builder.WithScheme(scheme.Scheme)
 	}
-	
+
 	if len(initObjs) > 0 {
 		builder = builder.WithRuntimeObjects(initObjs...)
 	}
-	
+
 	return builder.Build()
 }
 
@@ -35,42 +37,39 @@ func SetupEnvTest(crdPaths []string) (*envtest.Environment, error) {
 	testEnv := &envtest.Environment{
 		CRDDirectoryPaths: crdPaths,
 	}
-	
+
 	// Set TEST_MODE to ensure other components know we're in test mode
 	os.Setenv("TEST_MODE", "true")
-	
+
 	// Create a temporary KUBECONFIG if not set
 	if os.Getenv("KUBECONFIG") == "" {
 		tmpDir, err := os.MkdirTemp("", "kubeconfig")
 		if err != nil {
 			return nil, err
 		}
-		
+
 		kubeconfig := filepath.Join(tmpDir, "kubeconfig")
 		os.Setenv("KUBECONFIG", kubeconfig)
 	}
-	
-	cfg, err := testEnv.Start()
+
+	_, err := testEnv.Start()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return testEnv, nil
 }
 
 // GetClientFromEnv creates a real client from the test environment
-func GetClientFromEnv(env *envtest.Environment, scheme *runtime.Scheme) (client.Client, error) {
-	cfg, err := env.Config()
-	if err != nil {
-		return nil, err
+func GetClientFromEnv(env *envtest.Environment, s *runtime.Scheme) (client.Client, error) {
+	cfg := env.Config
+
+	if s == nil {
+		s = runtime.NewScheme()
+		_ = scheme.AddToScheme(s)
 	}
-	
-	if scheme == nil {
-		scheme = runtime.NewScheme()
-		_ = scheme.Scheme.AddToScheme(scheme)
-	}
-	
-	return client.New(cfg, client.Options{Scheme: scheme})
+
+	return client.New(cfg, client.Options{Scheme: s})
 }
 
 // CreateObject is a helper to create an object and wait for it to exist
@@ -79,7 +78,7 @@ func CreateObject(ctx context.Context, c client.Client, obj client.Object) error
 	if err != nil {
 		return err
 	}
-	
+
 	// Get the object to ensure it was created
 	return c.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 }
@@ -96,7 +95,7 @@ func GetTestConfig() (*rest.Config, error) {
 	if err == nil {
 		return config, nil
 	}
-	
+
 	// Try KUBECONFIG env var
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig != "" {
@@ -104,7 +103,7 @@ func GetTestConfig() (*rest.Config, error) {
 			return clientcmd.BuildConfigFromFlags("", kubeconfig)
 		}
 	}
-	
+
 	// Try default location
 	home, err := os.UserHomeDir()
 	if err == nil {
@@ -113,13 +112,13 @@ func GetTestConfig() (*rest.Config, error) {
 			return clientcmd.BuildConfigFromFlags("", kubeconfig)
 		}
 	}
-	
+
 	// For testing, return a minimal config
 	if os.Getenv("TEST_MODE") == "true" {
 		return &rest.Config{
 			Host: "http://localhost:8080",
 		}, nil
 	}
-	
+
 	return nil, err
 }

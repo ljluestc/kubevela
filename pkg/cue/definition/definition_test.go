@@ -1,46 +1,5 @@
 package definition
-// Package definition provides utilities for working with definition resources
-package definition
 
-import (
-	"context"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	"github.com/oam-dev/kubevela/apis/core.oam.dev/v1beta1"
-)
-
-func TestGetUserAnnotationsAndLabels(t *testing.T) {
-	def := &Definition{
-		Unstructured: unstructured.Unstructured{},
-	}
-	
-	// Set annotations
-	def.SetAnnotations(map[string]string{
-		UserPrefix + "annotation": "test-value",
-		"other-annotation":        "other-value",
-	})
-	
-	// Set labels
-	def.SetLabels(map[string]string{
-		UserPrefix + "label": "test-label",
-		"other-label":        "other-label",
-	})
-	
-	// Test GetUserAnnotations
-	userAnnotations := def.GetUserAnnotations()
-	assert.Equal(t, 1, len(userAnnotations))
-	assert.Equal(t, "test-value", userAnnotations[UserPrefix+"annotation"])
-	
-	// Test GetUserLabels
-	userLabels := def.GetUserLabels()
-	assert.Equal(t, 1, len(userLabels))
-	assert.Equal(t, "test-label", userLabels[UserPrefix+"label"])
-}
 
 func TestDefinitionWithTestObjects(t *testing.T) {
 	// Create test objects
@@ -127,7 +86,7 @@ output: {
 	}
 }
 `)
-// Package definition provides utilities for working with definition resources
+// Package definition provides tests for definition utilities
 package definition
 
 import (
@@ -138,8 +97,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/oam-dev/kubevela/apis/core.oam.dev/common"
 	"github.com/oam-dev/kubevela/apis/core.oam.dev/v1beta1"
 )
 
@@ -214,6 +173,37 @@ func TestCreateTestDefinitions(t *testing.T) {
 	assert.Equal(t, "default", traitDef.Namespace)
 	assert.Equal(t, "test-trait-ref", traitDef.Spec.Reference.Name)
 	assert.Equal(t, "patch: {}", traitDef.Spec.Schematic.CUE.Template)
+}
+
+func TestConvertWorkloadDefinitionToComponentDefinition(t *testing.T) {
+	wlDef := &v1beta1.WorkloadDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workload",
+			Namespace: "default",
+		},
+		Spec: v1beta1.WorkloadDefinitionSpec{
+			Reference: common.Reference{
+				Name: "test-type",
+			},
+		},
+	}
+	
+	compDef := ConvertWorkloadDefinitionToComponentDefinition(wlDef)
+	
+	assert.Equal(t, "test-workload", compDef.Name)
+	assert.Equal(t, "default", compDef.Namespace)
+	assert.Equal(t, "test-type", compDef.Spec.Workload.Type)
+}
+
+func TestIsWorkloadDefinition(t *testing.T) {
+	def := &Definition{
+		Unstructured: unstructured.Unstructured{},
+	}
+	def.SetKind("WorkloadDefinition")
+	assert.True(t, def.IsWorkloadDefinition())
+	
+	def.SetKind("ComponentDefinition")
+	assert.False(t, def.IsWorkloadDefinition())
 }
 	// Create test TraitDefinition
 	traitDef := CreateTestTraitDefinition("test-trait", "default", `

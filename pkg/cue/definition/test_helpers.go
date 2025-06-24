@@ -1,3 +1,4 @@
+// Package definition provides utilities for working with definition resources
 package definition
 
 import (
@@ -11,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/oam-dev/kubevela/apis/core.oam.dev/common"
 	"github.com/oam-dev/kubevela/apis/core.oam.dev/v1beta1"
 )
 
@@ -25,7 +27,10 @@ func SetupTestDefinitionClient(t *testing.T, defs ...runtime.Object) *Definition
 	// Convert runtime.Object to client.Object for the client builder
 	clientObjs := make([]client.Object, 0, len(defs))
 	for _, obj := range defs {
-		clientObjs = append(clientObjs, obj.(client.Object))
+		clientObj, ok := obj.(client.Object)
+		if ok {
+			clientObjs = append(clientObjs, clientObj)
+		}
 	}
 
 	// Create a fake client with the test objects
@@ -49,11 +54,11 @@ func CreateTestComponentDefinition(name, namespace string, template string) *v1b
 			Namespace: namespace,
 		},
 		Spec: v1beta1.ComponentDefinitionSpec{
-			Workload: v1beta1.WorkloadTypeDescriptor{
+			Workload: common.WorkloadTypeDescriptor{
 				Type: "test-workload",
 			},
-			Schematic: &v1beta1.Schematic{
-				CUE: &v1beta1.CUE{
+			Schematic: &common.Schematic{
+				CUE: &common.CUE{
 					Template: template,
 				},
 			},
@@ -69,11 +74,11 @@ func CreateTestTraitDefinition(name, namespace string, template string) *v1beta1
 			Namespace: namespace,
 		},
 		Spec: v1beta1.TraitDefinitionSpec{
-			Reference: v1beta1.DefinitionReference{
+			Reference: common.DefinitionReference{
 				Name: name + "-ref",
 			},
-			Schematic: &v1beta1.Schematic{
-				CUE: &v1beta1.CUE{
+			Schematic: &common.Schematic{
+				CUE: &common.CUE{
 					Template: template,
 				},
 			},
