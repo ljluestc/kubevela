@@ -41,6 +41,10 @@ template: {
 	respBody: req.$returns.body
 	resp:     json.Unmarshal(respBody)
 
+  output: {
+    body: resp
+  }
+
 	outputs: {
 		statusCode: req.$returns.statusCode
 		body:       resp
