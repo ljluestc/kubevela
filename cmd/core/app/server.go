@@ -55,6 +55,7 @@ import (
 	commonconfig "github.com/oam-dev/kubevela/pkg/controller/common"
 	oamv1beta1 "github.com/oam-dev/kubevela/pkg/controller/core.oam.dev/v1beta1"
 	"github.com/oam-dev/kubevela/pkg/controller/core.oam.dev/v1beta1/application"
+	"github.com/oam-dev/kubevela/pkg/controller/workflowrun"
 	"github.com/oam-dev/kubevela/pkg/features"
 	"github.com/oam-dev/kubevela/pkg/monitor/watcher"
 	"github.com/oam-dev/kubevela/pkg/multicluster"
@@ -470,6 +471,12 @@ func prepareRun(ctx context.Context, manager manager.Manager, coreOptions *optio
 		return err
 	}
 	klog.InfoS("OAM controllers setup completed successfully")
+
+	// Setup WorkflowRun labeler to ensure CLI-created WorkflowRuns are discoverable by VelaUX
+	if err := workflowrun.Setup(manager, ctrl.Log.WithName("setup")); err != nil {
+		klog.ErrorS(err, "Unable to setup the WorkflowRun labeler controller")
+		return err
+	}
 
 	klog.V(2).InfoS("Initializing control plane cluster info")
 	if err := multicluster.InitClusterInfo(manager.GetConfig()); err != nil {
