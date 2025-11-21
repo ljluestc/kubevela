@@ -1,0 +1,80 @@
+# Example: How to fix GitHub issue #6806 with the new workflow steps
+# This shows the complete migration from problematic ConditionalWait to the new solution
+
+apiVersion: core.oam.dev/v1beta1
+kind: Application
+metadata:
+  name: polling-job-example
+  namespace: default
+spec:
+  components:
+  - name: polling-job
+    type: webservice
+    properties:
+      image: nginx:1.20
+
+  workflow:
+    steps:
+    # BEFORE (Issue #6806): Problematic approach
+    # - name: problematic-job
+    #   type: http-post-get-wait  # This would re-execute POST on every poll!
+    #   properties:
+    #     post:
+    #       url: "https://api.example.com/jobs"
+    #       method: "POST"
+    #       body:
+    #         name: "my-job"
+    #     idField: "id"
+    #     get:
+    #       baseUrl: "https://api.example.com/jobs"
+    #       statusField: "status"
+    #       successValue: "completed"
+    #       maxAttempts: 10  # No control over this!
+    #       interval: "30s"  # No control over this!
+
+    # AFTER (Fixed): Using the new http-post-get-wait step
+    - name: async-job-with-proper-polling
+      type: http-post-get-wait
+      properties:
+        post:
+          url: "https://api.example.com/jobs"
+          method: "POST"
+          body:
+            name: "my-job"
+            type: "async"
+          header:
+            Content-Type: "application/json"
+            Authorization: "Bearer ${TOKEN}"
+          timeout: "30s"
+        idField: "jobId"  # Field containing job ID in POST response
+        get:
+          baseUrl: "https://api.example.com/jobs"
+          statusField: "status"  # Field to check in polling responses
+          successValue: "completed"  # Value indicating completion
+          maxAttempts: 20  # Maximum polling attempts (configurable!)
+          interval: "30s"  # Polling interval (configurable!)
+          header:
+            Accept: "application/json"
+            Authorization: "Bearer ${TOKEN}"
+          timeout: "10s"
+
+    # Alternative: Using http-get-wait for simple polling
+    - name: simple-status-polling
+      type: http-get-wait
+      properties:
+        url: "https://api.example.com/status/123"
+        statusField: "status"
+        successValue: "ready"
+        maxAttempts: 15
+        interval: "20s"
+        header:
+          Authorization: "Bearer ${TOKEN}"
+
+    # Alternative: Using enhanced-conditional-wait
+    - name: enhanced-wait-example
+      type: enhanced-conditional-wait
+      properties:
+        continue: false  # Your condition logic here
+        maxAttempts: 30
+        interval: "60s"
+        message: "Waiting for deployment to complete"
